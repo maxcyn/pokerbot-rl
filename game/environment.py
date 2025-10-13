@@ -19,7 +19,7 @@ class PokerEnvironment:
         self.players = players
         self.deck = Deck()
         self.table = None
-        self.current_player = 0
+        self.current_player_index = 0
         self.done = False
 
     def reset(self):
@@ -31,45 +31,63 @@ class PokerEnvironment:
         self.table = Table(self.players)
         self.table.community_cards = self.deck.deal(3)  # Flop
         self.done = False
-        self.current_player = 0
+        self.current_player_index = 0
         return self.get_state()
-    
+
     def get_state(self):
-        # Return a simple state: player hand, community cards, chips, pot
-        p = self.players[self.current_player]
+        p = self.players[self.current_player_index]
+        opponent = self.players[(self.current_player_index + 1) % len(self.players)]
         state = {
             'hand': p.hand,
             'community': self.table.community_cards,
             'chips': p.chips,
-            'pot': self.table.pot
+            'pot': self.table.pot,
+            'current_bet': p.current_bet,
+            'opponent_chips': opponent.chips,
+            'opponent_bet': opponent.current_bet,
+            'position': self.current_player_index
         }
         return state
-        
+
     def step(self, action):
-        # action: 0=fold, 1=call/check, 2=raise
-        p = self.players[self.current_player]
+        p = self.players[self.current_player_index]
         if action == 0:
             p.folded = True
         elif action == 1:
-            pass  # call/check logic
+            # Basic call/check logic
+            to_call = self.players[(self.current_player_index + 1) % len(self.players)].current_bet - p.current_bet
+            amount = min(to_call, p.chips)
+            p.chips -= amount
+            p.current_bet += amount
+            self.table.pot += amount
         elif action in [2, 3, 4, 5]:
-            min_raise = 10 # placeholder for min raise
+            min_raise = 10 # placeholder
             amount = get_raise_amount(action, min_raise, self.table.pot, p.chips)
             p.chips -= amount
+            p.current_bet += amount
             self.table.pot += amount
+
         # Switch player
-        self.current_player = (self.current_player + 1) % len(self.players)
-        # End condition: one left or after river
-        if sum(not pl.folded for pl in self.players) == 1 or len(self.table.community_cards) == 5: # game ends if there is 1 person left or after river
+        self.current_player_index = (self.current_player_index + 1) % len(self.players)
+
+        # End condition
+        if sum(not pl.folded for pl in self.players) == 1 or len(self.table.community_cards) == 5:
             self.done = True
-        return self.get_state(), self.get_reward(), self.done
-    
+        
+        reward = self.get_reward()
+        
+        return self.get_state(), reward, self.done
+
     def get_reward(self):
-        # Simple reward: +1 for winner, -1 for loser
         if not self.done:
             return 0
-        # Find winner
+        
         scores = [evaluate_hand(p.hand, self.table.community_cards) if not p.folded else float('inf') for p in self.players]
-        winner = scores.index(min(scores))
-        rewards = [1 if i == winner else -1 for i in range(len(self.players))]
-        return rewards[self.current_player]
+        winner_index = scores.index(min(scores))
+        
+        # Simple reward: winner gets the pot, loser loses their bet
+        for i, p in enumerate(self.players):
+            if i == winner_index:
+                return self.table.pot - p.current_bet
+            else:
+                return -p.current_bet
