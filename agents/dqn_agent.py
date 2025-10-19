@@ -60,7 +60,6 @@ class DQNAgent:
         q_target = r + self.gamma * q_next * (1 - d)            # Compute target Q-values (Bellman eq.)
         
         loss = nn.MSELoss()(q, q_target.detach())                # Mean squared error loss between Q and target
-        
         self.optimizer.zero_grad()
         loss.backward()                                          # Backpropagation of loss
         self.optimizer.step()                                    # Update network weights
@@ -72,3 +71,14 @@ class DQNAgent:
     # Decay epsilon after each episode to reduce exploration over time
     def decay_epsilon(self):
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
+
+    def save(self, path):
+        """Saves the model's state dictionary."""
+        torch.save(self.model.state_dict(), path)
+
+    def load(self, path):
+        """Loads the model's state dictionary."""
+        self.model.load_state_dict(torch.load(path))
+        self.target.load_state_dict(self.model.state_dict())
+        self.model.eval() # Set model to evaluation mode
+        self.target.eval()

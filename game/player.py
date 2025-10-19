@@ -21,7 +21,8 @@ class Player:
         self.chips = chips
 
     def bet(self, amount):
-        bet_amount = min(amount, self.chips)
+        safe_amount = max(0, amount)
+        bet_amount = min(safe_amount, self.chips)
         if bet_amount >= self.chips:
             self.is_all_in = True
         self.chips -= bet_amount

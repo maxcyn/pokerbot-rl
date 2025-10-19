@@ -71,8 +71,10 @@ def train():
         if episode % TARGET_UPDATE == 0:
             agent.update_target()
         
-        if episode % 100 == 0:
+        if episode % 10 == 0:
             agent.decay_epsilon()
+        
+        if episode % 100 == 0:
             print(f"Episode {episode}, DQN Chips: {p1.chips}, Epsilon: {agent.epsilon:.4f}")
 
     # Plotting the P/L curve
@@ -83,6 +85,10 @@ def train():
     plt.ylabel('Total Chips')
     plt.grid(True)
     plt.show()
+
+    # Save the trained model
+    print("Training finished. Saving model...")
+    agent.save("pokerbot_dqn.pth")
 
 if __name__ == "__main__":
     train()

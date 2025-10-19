@@ -1,4 +1,3 @@
-# maxcyn/pokerbot-rl/pokerbot-rl-5d9393068a13f17d65d069dc7abc424945cc334b/game/environment.py
 from .deck import Deck
 from .table import Table
 from .hand_evaluator import evaluate_hand
@@ -59,8 +58,9 @@ class PokerEnvironment:
         bb_amount = bb_player.post_blind(self.big_blind)
         self.table.pot += sb_amount + bb_amount
         
-        self.current_player_index = (bb_pos + 1) % len(self.players)
-        self.last_raiser_index = bb_pos
+        # In heads-up, SB/Button acts first pre-flop
+        self.current_player_index = sb_pos
+        self.last_raiser_index = bb_pos # The BB is the "last raise"
         
         return self.get_state()
 
@@ -78,8 +78,9 @@ class PokerEnvironment:
     def _start_new_betting_round(self):
         for p in self.players:
             p.current_bet = 0
+        # Post-flop, SB/Button always acts first
         self.current_player_index = (self.dealer_button_pos + 1) % len(self.players)
-        self.last_raiser_index = -1
+        self.last_raiser_index = -1 # No raiser yet
 
     def _advance_round(self):
         if self.betting_round == BettingRound.PREFLOP:
@@ -104,44 +105,58 @@ class PokerEnvironment:
             return active_players[0]
         else:
             scores = [(p, evaluate_hand(p.hand, self.table.community_cards)) for p in active_players]
-            scores.sort(key=lambda x: x[1])
+            scores.sort(key=lambda x: x[1]) # Lower is better
             return scores[0][0]
 
     def step(self, action):
         p = self.players[self.current_player_index]
         opponent = self.players[(self.current_player_index + 1) % len(self.players)]
         reward = 0
+        betting_round_over = False
 
-        # Action logic
+        if p.is_all_in:
+            # Player is all-in, they cannot act.
+            action = 1 # Force a "check"
+
         if action == 0: # Fold
             p.folded = True
+        
         elif action == 1: # Call/Check
             amount_to_call = opponent.current_bet - p.current_bet
-            p.bet(amount_to_call)
-        elif action in [2, 3, 4, 5]: # Raise actions
-            min_raise = opponent.current_bet * 2
+            bet_amount = p.bet(amount_to_call)
+            self.table.pot += bet_amount
+            
+            # If player called, the betting round is over (unless they were BB and SB just limped)
+            if amount_to_call > 0 or self.betting_round > BettingRound.PREFLOP:
+                 betting_round_over = True
+
+        elif action in [2, 3, 4, 5]: # Raise
+            min_raise = (opponent.current_bet - p.current_bet) + opponent.current_bet
             amount_to_raise = get_raise_amount(action, min_raise, self.table.pot, p.chips)
-            total_bet_amount = amount_to_raise + (opponent.current_bet - p.current_bet)
-            p.bet(total_bet_amount)
+            
+            # Calculate the total bet player needs to make
+            # (call opponent's bet + the raise amount)
+            amount_to_call = opponent.current_bet - p.current_bet
+            total_bet_amount = amount_to_call + amount_to_raise
+            
+            bet_amount = p.bet(total_bet_amount)
+            self.table.pot += bet_amount
             self.last_raiser_index = self.current_player_index
 
-        # Update pot based on all player bets
-        self.table.pot = sum(player.current_bet for player in self.players)
-        
-        # Check for end of betting round or end of hand
-        betting_round_over = False
+        # --- Check for end of hand/round ---
         active_players = [p for p in self.players if not p.folded]
         if len(active_players) <= 1:
             self.done = True
-        else:
+        
+        # If the round isn't over by a fold or call, move to the next player
+        if not self.done and not betting_round_over:
             self.current_player_index = (self.current_player_index + 1) % len(self.players)
-            action_is_closed = (self.last_raiser_index != -1 and self.players[self.last_raiser_index].current_bet == p.current_bet) or \
-                               (self.last_raiser_index == -1 and self.players[0].current_bet == self.players[1].current_bet and p.current_bet > 0)
-
-            if action_is_closed:
-                 betting_round_over = True
-
-        if betting_round_over:
+            
+            # If action gets back to the raiser, round is over
+            if self.current_player_index == self.last_raiser_index:
+                betting_round_over = True
+                
+        if betting_round_over and not self.done:
             self._advance_round()
 
         if self.done:
