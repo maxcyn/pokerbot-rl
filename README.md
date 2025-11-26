@@ -20,6 +20,7 @@ State Representation: The agent perceives a 13-dimensional state vector includin
 Performance Tracking: Tracks total chips won/lost over episodes and calculates Win Rate and BB/100 (Big Blinds per 100 hands) during evaluation.
 
 **Project Structure**
+```text
 pokerbot-rl/
 ├── agents/                 # Agent implementations
 │   ├── dqn_agent.py        # Deep Q-Network Agent (PyTorch)
@@ -39,6 +40,7 @@ pokerbot-rl/
 │   └── replay_buffer.py    # Experience Replay Buffer implementation
 ├── evaluate_bot.py         # Script to evaluate the trained model
 └── main.py                 # Entry point to start training
+```
 
 **Usage**
 1. Training the Agent
